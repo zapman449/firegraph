@@ -50,6 +50,7 @@ def main() :
     for file in files :
         if file.startswith('beacon') :
             result = file
+            break
     if not result :
         print 'mer?'
         sys.exit()
