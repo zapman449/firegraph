@@ -10,3 +10,6 @@ possible.
 
 server.py: works in a basic way.  Throwing away all data, just keeping counts
 from the beacons currently.  Lame, but it's a step in the right direction.
+
+Next ToDos:
+figure out data storage, snapshots, and how to present the data. No biggie. ;-)
