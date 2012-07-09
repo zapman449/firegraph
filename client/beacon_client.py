@@ -44,7 +44,10 @@ def zipfromline(line) :
     return location
 
 def main() :
+    STOP_FILE = '/tmp/stop'
     global DIR
+    if os.path.isfile(STOP_FILE) :
+        os.unlink(STOP_FILE)
     files = os.listdir(DIR)
     result = None
     for file in files :
@@ -68,9 +71,14 @@ def main() :
             counter += 1
             #print z
             sock.sendto( z, 0, (DEST_IP, UDP_PORT))
+            if counter % 50 == 0 :
+                if os.path.isfile(STOP_FILE) :
+                    break
     except KeyboardInterrupt :
         print "sent messages: %d" % counter
         raise
+    s = open(STOP_FILE, 'w')
+    s.write("sent messages: %d\n" % counter)
 
 if __name__ == '__main__' :
     main()
