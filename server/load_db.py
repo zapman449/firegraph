@@ -38,6 +38,8 @@ def make_tables(connection, cursor) :
     cursor.execute("CREATE TABLE ZipCodes( ZipCode CHAR(5) UNIQUE NOT NULL ON CONFLICT ROLLBACK, City CHAR(20), State CHAR(5), Latitude CHAR(10), Longitude CHAR(10))")
     cursor.execute("CREATE TABLE LocCodes( LocCode CHAR(8) UNIQUE NOT NULL ON CONFLICT ROLLBACK, City CHAR(20) )")
     connection.commit()
+    cursor.execute("CREATE INDEX ZipCodeIndex on ZipCodes (ZipCode)")
+    connection.commit()
 
 def load_zips(connection, cursor) :
     global ZIPCODES
