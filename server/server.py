@@ -1,8 +1,8 @@
 #!/usr/bin/python
 
-import csv
-import os
-import os.path
+#import csv
+#import os
+#import os.path
 import re
 import socket
 import sqlite3
@@ -13,18 +13,44 @@ UDP_PORT = 45454
 results = {}
 SQLDB = 'zips.sqlite'
 CSV = 'zipcode.csv'
+success_count = 0
+fail_count = 0
+
+def process_data(data, connection, cursor) :
+    global success_count
+    global fail_count
+    re_zip = re.compile('\d\d\d\d\d')
+    re_loc = re.compile('US[A-Z][A-Z]\d\d\d\d')
+    #re_loc_oob = re.compile('[A-Z][A-Z][A-Z][A-Z]\d\d\d\d')
+    #re_state = re.compile(' [A-Z][A-Z] ')
+    string = data.replace('+', ' ').replace('+', ' ')
+    found = False
+    zsearch = re_zip.search(string)
+    if zsearch == None :
+        pass
+    else :
+        zipcode = zsearch.group()
+        lat, longi = zip_to_ll(zipcode, connection, cursor)
+        found = True
+    if not found :
+        lsearch = re_loc.search(string)
+        if lsearch == None :
+            pass
+        else :
+            loccode = lsearch.group()
+            lat, longi = loc_to_ll(loccode, connection, cursor)
+            found = True
+    if found :
+        success_count += 1
+    else :
+        fail_count += 1
+        print repr(string)
 
 def server_loop(connection, cursor) :
     global UDP_IP
     global UDP_PORT
-    re_zip = re.compile('\d\d\d\d\d')
-    re_loc = re.compile('US[A-Z][A-Z]\d\d\d\d')
-    re_loc_oob = re.compile('[A-Z][A-Z][A-Z][A-Z]\d\d\d\d')
-    re_state = re.compile(' [A-Z][A-Z] ')
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
     sock.bind( (UDP_IP, UDP_PORT) )
-    success_count = 0
-    fail_count = 0
     try :
         while True :
             data, addr = sock.recvfrom( 1024 )
@@ -34,28 +60,7 @@ def server_loop(connection, cursor) :
                 results[ip] = 0
             results[ip] += 1
             #print repr(data)
-            string = data.replace('+', ' ').replace('+', ' ')
-            found = False
-            zsearch = re_zip.search(string)
-            if zsearch == None :
-                pass
-            else :
-                zipcode = zsearch.group()
-                lat, longi = zip_to_ll(zipcode, connection, cursor)
-                found = True
-            if not found :
-                lsearch = re_loc.search(string)
-                if lsearch == None :
-                    pass
-                else :
-                    loccode = lsearch.group()
-                    lat, longi = loc_to_ll(loccode, connection, cursor)
-                    found = True
-            if found :
-                success_count += 1
-            else :
-                fail_count += 1
-                print repr(string)
+            process_data(data, connection, cursor)
     except KeyboardInterrupt :
         print 'success %d fail %d' % (success_count, fail_count)
         raise
