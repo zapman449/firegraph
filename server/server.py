@@ -89,7 +89,7 @@ class ThreadLocationParse(threading.Thread) :
                 #print repr(string)
             self.data_in_queue.task_done()
             counter += 1
-            if counter % 50 == 0 :
+            if counter % 200 == 0 :
                 print "in LocParse data_in: %d lat_in: %d fail_in: %d" % (self.data_in_queue.qsize(), self.lat_long_in_queue.qsize(), self.fail_in_queue.qsize())
 
     def zip_to_ll(self, zipcode) :
@@ -162,7 +162,7 @@ def main() :
     data_in_queue = Queue.Queue()
     lat_long_in_queue = Queue.Queue()
     fail_in_queue = Queue.Queue()
-    processors = [ ThreadLocationParse(data_in_queue, lat_long_in_queue, fail_in_queue) for i in range(100) ]
+    processors = [ ThreadLocationParse(data_in_queue, lat_long_in_queue, fail_in_queue) for i in range(25) ]
     for p in processors :
         p.setDaemon(True)
         p.start()
