@@ -1,15 +1,19 @@
 #!/usr/bin/python
 
+import cPickle as pickle
 import os
 import os.path
+import re
 import socket
 import sys
 import time
 
 DIR = '/logs/ns_logs/nginx'
+STOP_FILE = '/tmp/stop'
+JOIN_STR = '^'
 DEST_IP = '3.4.163.195'
 UDP_PORT = 45454
-
+PICKLE = '/tmp/loc.pickle'
 #referer=http://www.weather.com/weather/today/Kansas+City+MO+64152?lswe=64152&lwsa=WeatherLocalUndeclared&from=searchbox_localwx
 #referer=http://www.weather.com/weather/map/interactive/34655
 
@@ -22,7 +26,7 @@ def follow(thefile) :
             continue
         yield line.strip()
 
-def zipfromline(line) :
+def locfromline(line) :
     parts = line.split('^')
     #d = {}
     #for p in parts :
@@ -43,9 +47,25 @@ def zipfromline(line) :
     #print 'returning', repr(location)
     return location
 
+def latlongfromloc(locstr) :
+    #re_zip = re.compile('\d{5}')
+    #re_loc = re.compile('US[A-Z]{2}\d{4}')
+    re_loc = re.compile('\d{5}|US[A-Z]{2}/d{4}')
+    # match either 5 digits (zip code) or US Weather Code (US<State><4digits>)
+    lsearch = re_loc.search(locstr)
+    if lsearch == None :
+        return None,None
+    else :
+        zip_or_wcode = lsearch.group()
+        try :
+            return locdict[zip_or_wcode]
+        except KeyError :
+            return None,None
+
 def main() :
-    STOP_FILE = '/tmp/stop'
+    global STOP_FILE
     global DIR
+    global JOIN_STR
     if os.path.isfile(STOP_FILE) :
         os.unlink(STOP_FILE)
     files = os.listdir(DIR)
@@ -61,16 +81,20 @@ def main() :
     lines = follow(log)
     lines2 = (line for line in lines if '/weather/' in line)
     lines3 = (line for line in lines2 if '/weather/map/' not in line)
-    zips = (zipfromline(line) for line in lines3)
+    locs = (locfromline(line) for line in lines3)
+    latlong = ( latlongfromloc(loc) for loc in locs if loc != None )
     counter = 0
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
     try :
-        for z in zips :
-            if z == None :
+        for lat,longi in latlong :
+            if lat == None :
                 continue
             counter += 1
-            #print z
-            sock.sendto( z, 0, (DEST_IP, UDP_PORT))
+            #print lat,longi
+            lat = "%3.1f" % float(lat)
+            longi = "%3.1f" % float(longi)
+            #print lat,longi
+            sock.sendto( JOIN_STR.join((lat, longi)), 0, (DEST_IP, UDP_PORT))
             if counter % 50 == 0 :
                 if os.path.isfile(STOP_FILE) :
                     break
@@ -81,4 +105,7 @@ def main() :
     s.write("sent messages: %d\n" % counter)
 
 if __name__ == '__main__' :
+    p = open(PICKLE, 'rb')
+    locdict = pickle.load(p)
+    p.close()
     main()
