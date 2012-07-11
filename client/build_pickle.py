@@ -64,7 +64,7 @@ def main() :
     global picklefile
     load_zips()
     load_locs()
-    print len(locdict), len(citydict)
+    #print len(locdict), len(citydict)
     pickleout = open(picklefile, 'wb')
     pickle.dump(locdict, pickleout)
     pickleout.close()
