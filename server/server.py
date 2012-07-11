@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/pypy
 
 #import csv
 #import os
@@ -11,6 +11,7 @@ import sys
 import threading
 import random
 
+JOIN_STR = '^'
 UDP_IP = '3.4.163.195'
 UDP_PORT = 45454
 results = {}
@@ -19,109 +20,68 @@ CSV = 'zipcode.csv'
 success_count = 0
 fail_count = 0
 
+class ThreadGenImage(threading.Thread) :
+    def __init__(self, aggregate_in_queue) :
+        threading.Thread.__init__(self, name='GenImage')
+        self.aggregate_in_queue = aggregate_in_queue
+
+    def run(self) :
+        while True :
+            aggregate = aggregate_in_queue.get()
+            print repr(aggregate)
+            aggregate_in_queue.task_done()
+
 class ThreadSuccessTrack(threading.Thread) :
-    def __init__(self, lat_long_in_queue, rand) :
-        threading.Thread.__init__(self)
+    def __init__(self, lat_long_in_queue, aggregate_in_queue, rand) :
+        threading.Thread.__init__(self, name='SuccessTrack')
         self.lat_long_in_queue = lat_long_in_queue
+        self.aggregate_in_queue = aggregate_in_queue
         self.successful = 0
-        self.fname = 'output.%03d' % rand
-        self.f = open(self.fname, 'w')
+        #self.fname = 'output.%03d' % rand
+        #self.f = open(self.fname, 'w')
+        self.aggregate = {}
 
     def run(self) :
         while True:
-            lat, longi = self.lat_long_in_queue.get()
-            self.successful += 1
-            self.f.write("%s %s\n" % (lat, longi))
-            if self.successful % 100 == 0 :
-                print 'in SuccessTrack, # successes is %d' % self.successful
+            message = self.lat_long_in_queue.get()
+            if message == 'push' :
+                self.aggregate_in_queue.put(self.aggregate)
+                self.aggregate = {}
+                print 'pushed aggregate'
+                threading.Timer(10, timed_aggregate_push(aggregate_in_queue)).start()
+            else :
+                lat, longi = message
+                self.successful += 1
+                #self.f.write("%s %s\n" % (lat, longi))
+                try :
+                    self.aggregate[(lat,longi)] += 1
+                except KeyError :
+                    self.aggregate[(lat,longi)] = 1
+                if self.successful % 100 == 0 :
+                    print 'in SuccessTrack, # successes is %d, aggr size is %d, aggr queue size is %d' % (self.successful,
+                            len(self.aggregate),
+                            self.aggregate_in_queue.qsize())
             self.lat_long_in_queue.task_done()
-
-class ThreadFailTrack(threading.Thread) :
-    def __init__(self, fail_in_queue) :
-        threading.Thread.__init__(self)
-        self.fail_in_queue = fail_in_queue
-        self.failures = 0
-
-    def run(self) :
-        while True:
-            fail = self.fail_in_queue.get()
-            self.failures += 1
-            if self.failures % 100 == 0 :
-                print 'in FailTrack, # failures is %d' % self.failures
-            self.fail_in_queue.task_done()
 
 class ThreadLocationParse(threading.Thread) :
     """thread to process a location data."""
-    def __init__(self, data_in_queue, lat_long_in_queue, fail_in_queue) :
-        threading.Thread.__init__(self)
+    def __init__(self, data_in_queue, lat_long_in_queue) :
+        threading.Thread.__init__(self, name='LocationParse')
         self.data_in_queue = data_in_queue
         self.lat_long_in_queue = lat_long_in_queue
-        self.fail_in_queue = fail_in_queue
-        self.connection = sqlite3.connect('zips.sqlite', 
-                                          check_same_thread = False)
-        self.cursor = self.connection.cursor()
-        self.re_zip = re.compile('\d\d\d\d\d')
-        self.re_loc = re.compile('US[A-Z][A-Z]\d\d\d\d')
-        #self.re_loc_oob = re.compile('[A-Z][A-Z][A-Z][A-Z]\d\d\d\d')
-        #self.re_state = re.compile(' [A-Z][A-Z] ')
 
     def run(self) :
         counter = 0
         while True :
             data = self.data_in_queue.get()
-            string = data.replace('+', ' ').replace('+', ' ')
-            found = False
-            zsearch = self.re_zip.search(string)
-            if zsearch == None :
-                pass
-            else :
-                zipcode = zsearch.group()
-                lat, longi = self.zip_to_ll(zipcode)
-                found = True
-            if not found :
-                lsearch = self.re_loc.search(string)
-                if lsearch == None :
-                    pass
-                else :
-                    loccode = lsearch.group()
-                    lat, longi = self.loc_to_ll(loccode)
-                    found = True
-            if found :
-                self.lat_long_in_queue.put((lat,longi))
-            else :
-                self.fail_in_queue.put(string)
-                #print repr(string)
+            lat, longi = data.split(JOIN_STR)
+            lat = float(lat)
+            longi = float(longi)
+            self.lat_long_in_queue.put((lat,longi))
             self.data_in_queue.task_done()
             counter += 1
             if counter % 200 == 0 :
-                print "in LocParse data_in: %d lat_in: %d fail_in: %d" % (self.data_in_queue.qsize(), self.lat_long_in_queue.qsize(), self.fail_in_queue.qsize())
-
-    def zip_to_ll(self, zipcode) :
-        self.cursor.execute("""SELECT Latitude, Longitude 
-                               FROM ZipCodes WHERE ZipCode = ?""", (zipcode,))
-        row = self.cursor.fetchone()
-        if row == None :
-            return None, None
-        else :
-            return row
-
-    def loc_to_ll(self, loccode) :
-        self.cursor.execute("""SELECT City 
-                               FROM LocCodes WHERE LocCode = ?""", (loccode,))
-        row = self.cursor.fetchone()
-        if row == None :
-            return None, None
-        else :
-            city = row[0]
-        state = loccode[2:4]
-        self.cursor.execute("""SELECT Latitude, Longitude 
-                               FROM ZipCodes WHERE City = ? AND State = ?""",
-                               (city,state))
-        row = self.cursor.fetchone()
-        if row == None :
-            return None, None
-        else :
-            return row
+                print "in LocParse data_in: %d lat_in: %d" % (self.data_in_queue.qsize(), self.lat_long_in_queue.qsize())
 
 def server_loop(data_in_queue) :
     global UDP_IP
@@ -133,49 +93,33 @@ def server_loop(data_in_queue) :
             data, addr = sock.recvfrom( 1024 )
             ip, port = addr
             #print repr(data), repr(addr)
-            if ip not in results :
-                results[ip] = 0
-            results[ip] += 1
+            try :
+                results[ip] += 1
+            except KeyError :
+                results[ip] = 1
             #print repr(data)
             #process_data(data, connection, cursor)
             data_in_queue.put(data)
     except KeyboardInterrupt :
-        print 'success %d fail %d' % (success_count, fail_count)
+        print 'received %d fail %d' % (success_count, fail_count)
         raise
 
-#def init_db() :
-#    global SQLDB
-#    try :
-#        connection = sqlite3.connect(SQLDB)
-#        cursor = connection.cursor()
-#    except  sqlite3.Error, e:
-#        print "Error %s:" % e.args[0]
-#        print 'hey... run load_db'
-#        sys.exit()
-#    try :
-#        cursor.execute("SELECT Version FROM DbVersion")
-#    except sqlite3.Error, e:
-#        if e.args[0].startswith("no such table: ") :
-#            # proxy test for an empty DB
-#            print 'hey... run load_db'
-#            sys.exit()
-#    return connection, cursor
+def timed_aggregate_push(aggregate_in_queue) :
+    aggregate_in_queue.put('push')
 
 def main() :
-    #connection, cursor = init_db()
     data_in_queue = Queue.Queue()
     lat_long_in_queue = Queue.Queue()
-    fail_in_queue = Queue.Queue()
-    processors = [ ThreadLocationParse(data_in_queue, lat_long_in_queue, fail_in_queue) for i in range(25) ]
+    aggregate_in_queue = Queue.Queue()
+    processors = [ ThreadLocationParse(data_in_queue, lat_long_in_queue) for i in range(1) ]
     for p in processors :
         p.setDaemon(True)
         p.start()
-    success = ThreadSuccessTrack(lat_long_in_queue, random.randint(0,1000))
+    success = ThreadSuccessTrack(lat_long_in_queue, aggregate_in_queue, random.randint(0,1000))
     success.setDaemon(True)
     success.start()
-    fail = ThreadFailTrack(fail_in_queue)
-    fail.setDaemon(True)
-    fail.start()
+    push_timer = threading.Timer(10, timed_aggregate_push(aggregate_in_queue))
+    push_timer.start()
     try :
         server_loop(data_in_queue)
     except KeyboardInterrupt :
