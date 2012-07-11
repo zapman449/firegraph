@@ -83,6 +83,15 @@ class ThreadLocationParse(threading.Thread) :
             if counter % 200 == 0 :
                 print "in LocParse data_in: %d lat_in: %d" % (self.data_in_queue.qsize(), self.lat_long_in_queue.qsize())
 
+class ThreadTimedAggrPush(threading.Thread) :
+    def __init__(self, aggregate_in_queue) :
+        threading.Thread.__init__(self, name='timedaggrpush')
+        self.aggregate_in_queue = aggregate_in_queue
+    def run() :
+        while True :
+            time.sleep(10)
+            self.aggregate_in_queue.put('push')
+
 def server_loop(data_in_queue) :
     global UDP_IP
     global UDP_PORT
@@ -104,9 +113,6 @@ def server_loop(data_in_queue) :
         print 'received %d fail %d' % (success_count, fail_count)
         raise
 
-def timed_aggregate_push(aggregate_in_queue) :
-    aggregate_in_queue.put('push')
-
 def main() :
     data_in_queue = Queue.Queue()
     lat_long_in_queue = Queue.Queue()
@@ -118,7 +124,9 @@ def main() :
     success = ThreadSuccessTrack(lat_long_in_queue, aggregate_in_queue, random.randint(0,1000))
     success.setDaemon(True)
     success.start()
-    push_timer = threading.Timer(10, timed_aggregate_push(aggregate_in_queue))
+    #push_timer = threading.Timer(10, timed_aggregate_push(aggregate_in_queue))
+    push_timer = ThreadTimedAggrPush(aggregate_in_queue)
+    push_timer.setDaemon(True)
     push_timer.start()
     try :
         server_loop(data_in_queue)
