@@ -9,6 +9,7 @@ import socket
 import sqlite3
 import sys
 import threading
+import random
 
 UDP_IP = '3.4.163.195'
 UDP_PORT = 45454
@@ -19,15 +20,18 @@ success_count = 0
 fail_count = 0
 
 class ThreadSuccessTrack(threading.Thread) :
-    def __init__(self, lat_long_in_queue) :
+    def __init__(self, lat_long_in_queue, rand) :
         threading.Thread.__init__(self)
         self.lat_long_in_queue = lat_long_in_queue
         self.successful = 0
+        self.fname = 'output.%03d' % rand
+        self.f = open(self.fname, 'w')
 
     def run(self) :
         while True:
             lat, longi = self.lat_long_in_queue.get()
             self.successful += 1
+            self.f.write("%s %s\n" % (lat, longi))
             if self.successful % 100 == 0 :
                 print 'in SuccessTrack, # successes is %d' % self.successful
             self.lat_long_in_queue.task_done()
@@ -166,7 +170,7 @@ def main() :
     for p in processors :
         p.setDaemon(True)
         p.start()
-    success = ThreadSuccessTrack(lat_long_in_queue)
+    success = ThreadSuccessTrack(lat_long_in_queue, random.randint(0,1000))
     success.setDaemon(True)
     success.start()
     fail = ThreadFailTrack(fail_in_queue)
