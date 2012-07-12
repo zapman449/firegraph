@@ -81,7 +81,9 @@ def main() :
     lines = follow(log)
     lines2 = (line for line in lines if '/weather/' in line)
     lines3 = (line for line in lines2 if '/weather/map/' not in line)
-    locs = (locfromline(line) for line in lines3)
+    lines4 = (line for line in lines3 if '/b/impression' not in line)
+    lines5 = (line for line in lines4 if 'tile=1&' not in line)
+    locs = (locfromline(line) for line in lines5)
     latlong = ( latlongfromloc(loc) for loc in locs if loc != None )
     counter = 0
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
