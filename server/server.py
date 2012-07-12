@@ -33,6 +33,7 @@ class ThreadGenImage(threading.Thread) :
             aggregate = self.aggregate_in_queue.get()
             name = self.outputfile + '.' + '%02d' % counter
             f = open(name, 'w')
+            f.write('''"Latitude","Longitude","value"\n''')
             for lat, longi in aggregate :
                 f.write('''"%3.1f","%3.1f","%d"\n''' % (lat, longi, 
                                                   aggregate[(lat, longi)]))
