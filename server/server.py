@@ -4,12 +4,13 @@
 #import os
 #import os.path
 import Queue
+import random
 import re
 import socket
 import sqlite3
 import sys
+import time
 import threading
-import random
 
 JOIN_STR = '^'
 UDP_IP = '3.4.163.195'
@@ -24,12 +25,21 @@ class ThreadGenImage(threading.Thread) :
     def __init__(self, aggregate_in_queue) :
         threading.Thread.__init__(self, name='GenImage')
         self.aggregate_in_queue = aggregate_in_queue
+        self.outputfile = 'imagedata'
 
     def run(self) :
+        counter = 1
         while True :
-            aggregate = aggregate_in_queue.get()
-            print repr(aggregate)
-            aggregate_in_queue.task_done()
+            aggregate = self.aggregate_in_queue.get()
+            name = self.outputfile + '.' + '%02d' % counter
+            f = open(name, 'w')
+            for lat, longi in aggregate :
+                f.write('''"%3.1f","%3.1f","%d"\n''' % (lat, longi, 
+                                                  aggregate[(lat, longi)]))
+            f.close()
+            counter += 1
+            print 'aggregate saved'
+            self.aggregate_in_queue.task_done()
 
 class ThreadSuccessTrack(threading.Thread) :
     def __init__(self, lat_long_in_queue, aggregate_in_queue, rand) :
@@ -48,7 +58,6 @@ class ThreadSuccessTrack(threading.Thread) :
                 self.aggregate_in_queue.put(self.aggregate)
                 self.aggregate = {}
                 print 'pushed aggregate'
-                threading.Timer(10, timed_aggregate_push(aggregate_in_queue)).start()
             else :
                 lat, longi = message
                 self.successful += 1
@@ -83,20 +92,24 @@ class ThreadLocationParse(threading.Thread) :
             if counter % 200 == 0 :
                 print "in LocParse data_in: %d lat_in: %d" % (self.data_in_queue.qsize(), self.lat_long_in_queue.qsize())
 
-class ThreadTimedAggrPush(threading.Thread) :
-    def __init__(self, aggregate_in_queue) :
-        threading.Thread.__init__(self, name='timedaggrpush')
-        self.aggregate_in_queue = aggregate_in_queue
-    def run() :
-        while True :
-            time.sleep(10)
-            self.aggregate_in_queue.put('push')
+#class ThreadTimedAggrPush(threading.Thread) :
+#    #def __init__(self, aggregate_in_queue, seconds_delay=10) :
+#    def __init__(self, aggregate_in_queue) :
+#        threading.Thread.__init__(self, name='timedaggrpush')
+#        self.aggregate_in_queue = aggregate_in_queue
+#        #self.seconds_delay = seconds_delay
+#    def run() :
+#        while True :
+#            #time.sleep(self.seconds_delay)
+#            time.sleep(10)
+#            self.aggregate_in_queue.put('push')
 
-def server_loop(data_in_queue) :
+def server_loop(data_in_queue, lat_long_in_queue) :
     global UDP_IP
     global UDP_PORT
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
     sock.bind( (UDP_IP, UDP_PORT) )
+    counter = 0
     try :
         while True :
             data, addr = sock.recvfrom( 1024 )
@@ -106,9 +119,13 @@ def server_loop(data_in_queue) :
                 results[ip] += 1
             except KeyError :
                 results[ip] = 1
+            counter += 1
             #print repr(data)
             #process_data(data, connection, cursor)
             data_in_queue.put(data)
+            if counter >= 5000 :
+                counter = 0
+                lat_long_in_queue.put('push')
     except KeyboardInterrupt :
         print 'received %d fail %d' % (success_count, fail_count)
         raise
@@ -124,12 +141,15 @@ def main() :
     success = ThreadSuccessTrack(lat_long_in_queue, aggregate_in_queue, random.randint(0,1000))
     success.setDaemon(True)
     success.start()
-    #push_timer = threading.Timer(10, timed_aggregate_push(aggregate_in_queue))
-    push_timer = ThreadTimedAggrPush(aggregate_in_queue)
-    push_timer.setDaemon(True)
-    push_timer.start()
+    #push_timer = ThreadTimedAggrPush(aggregate_in_queue, seconds_delay=10)
+    #push_timer = ThreadTimedAggrPush(aggregate_in_queue)
+    #push_timer.setDaemon(True)
+    #push_timer.start()
+    genimage = ThreadGenImage(aggregate_in_queue)
+    genimage.setDaemon(True)
+    genimage.start()
     try :
-        server_loop(data_in_queue)
+        server_loop(data_in_queue, lat_long_in_queue)
     except KeyboardInterrupt :
         for k in sorted(results) :
             print k, results[k]
