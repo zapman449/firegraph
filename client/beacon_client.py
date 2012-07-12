@@ -5,6 +5,7 @@ import os
 import os.path
 import re
 import socket
+from stat import ST_SIZE
 import sys
 import time
 
@@ -18,12 +19,28 @@ PICKLE = '/tmp/loc.pickle'
 #referer=http://www.weather.com/weather/map/interactive/34655
 
 def follow(thefile) :
-    thefile.seek(0,2)
+    log = open(thefile, 'r')
+    log.seek(0,2)
+    counter = 0
     while True :
-        line = thefile.readline()
+        line = log.readline()
         if not line :
+            print 'sleeping', counter
             time.sleep(0.1)
+            counter += 1
+            if counter > 20 :
+                # if we get to 2 seconds without a line, see if we need to reset
+                counter = 0
+                cur_size = os.stat(thefile)[ST_SIZE]
+                cur_pos = log.tell()
+                #print 'size', cur_size, 'pos', cur_pos
+                if cur_size < cur_pos :
+                    # if the size of the file is less than the position in the
+                    # file...
+                    log.close()
+                    log = open(thefile, 'r')
             continue
+        #print '=> yielding'
         yield line.strip()
 
 def locfromline(line) :
@@ -77,7 +94,7 @@ def main() :
     if not result :
         print 'mer?'
         sys.exit()
-    log = open(os.path.join(DIR, file), 'r')
+    log = os.path.join(DIR, file)
     lines = follow(log)
     lines2 = (line for line in lines if '/weather/' in line)
     lines3 = (line for line in lines2 if '/weather/map/' not in line)
