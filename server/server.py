@@ -3,6 +3,7 @@
 #import csv
 #import os
 #import os.path
+import os
 import Queue
 import random
 import re
@@ -25,20 +26,23 @@ class ThreadGenImage(threading.Thread) :
     def __init__(self, aggregate_in_queue) :
         threading.Thread.__init__(self, name='GenImage')
         self.aggregate_in_queue = aggregate_in_queue
-        self.outputfile = 'imagedata'
+        #self.outputfile = 'imagedata'
+        self.outputfile = '/firegraph/firegraph-apache/realtime/imagedata'
 
     def run(self) :
-        counter = 1
+        counter = 0
         while True :
             aggregate = self.aggregate_in_queue.get()
-            name = self.outputfile + '.' + '%02d' % counter
+            name = self.outputfile + '.' + '%02d' % counter + '.csv'
             f = open(name, 'w')
-            f.write('''"Latitude","Longitude","value"\n''')
+            f.write('''Latitude,Longitude,value\n''')
             for lat, longi in aggregate :
-                f.write('''"%3.1f","%3.1f","%d"\n''' % (lat, longi, 
+                f.write('''%3.1f,%3.1f,%d\n''' % (lat, longi, 
                                                   aggregate[(lat, longi)]))
             f.close()
             counter += 1
+            if counter >= 100 :
+                counter = 0
             print 'aggregate saved'
             self.aggregate_in_queue.task_done()
 
