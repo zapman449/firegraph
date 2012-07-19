@@ -61,37 +61,51 @@ def main() :
         print 'uh, like, file not found, dude.'
         sys.exit()
     baseTS = 0
-    30min = 1800    # 30 min * 60 sec
+    counter = 0
+    min15 = 900    # 15 min * 60 sec
     aggregate = {}
-    for l in open(myfile) :
+    for line in open(myfile) :
         if '/weather/' not in line :
             continue
         if '/weather/map' in line :
             continue
-        if '/b/impression' not in line :
-            continue
+        #if '/b/impression' not in line :
+        #    continue
         ts,refer = line.split(',', 1)
-        lat,longi = latlongfromloc(locfromline(refer))
+        ts = int(ts)
+        try :
+            #lat,longi = latlongfromloc(locfromline(refer))
+            lat,longi = latlongfromloc(refer)
+        except :
+            print 'ERROR:', ts, refer
+            raise
         if lat == None :
             continue
         lat = "%3.1f" % float(lat)
         longi = "%3.1f" % float(longi)
-        if ts > baseTS + 30min :
+        if ts > baseTS + min15 :
             baseTS = ts
             try :
-                out.write('''"Latitude","Longitude","value"\n''')
+                #out.write('''"Latitude","Longitude","value"\n''')
                 for lat, longi in aggregate :
-                    out.write('''"%3.1f","%3.1f","%d"\n''' % (lat, longi, 
+                    out.write('''"%s","%s","%d"\n''' % (lat, longi, 
                                                   aggregate[(lat, longi)]))
                 out.close()
                 aggregate = {}
             except NameError :
+                #print 'skipping first write', ts, baseTS, lat, longi
                 pass
-            out = open('output.%d' % baseTS, 'w')
+            out = open('imagedata.%02d.csv' % counter, 'w')
+            counter += 1
         try :
             aggregate[(lat,longi)] += 1
         except KeyError :
             aggregate[(lat,longi)] = 1
+    out.write('''"Latitude","Longitude","value"\n''')
+    for lat, longi in aggregate :
+        out.write('''"%s","%s","%d"\n''' % (lat, longi, 
+                                      aggregate[(lat, longi)]))
+    out.close()
 
 if __name__ == '__main__' :
     p = open(PICKLE, 'rb')
