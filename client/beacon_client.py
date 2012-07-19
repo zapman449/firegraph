@@ -1,49 +1,99 @@
 #!/usr/bin/python
 
 import cPickle as pickle
+import logging
+import logging.handlers
 import os
 import os.path
 import re
 import socket
-from stat import ST_SIZE
+from stat import ST_SIZE, ST_INO, ST_DEV
 import sys
 import time
 
-DIR = '/logs/ns_logs/nginx'
-STOP_FILE = '/tmp/stop'
+DEBUG = True
+
+BEACONDIR = '/logs/ns_logs/nginx'
+HOMEDIR = '/tmp'
+STOP_FILE = os.path.join(HOMEDIR, 'stop')
 JOIN_STR = '^'
 DEST_IP = '3.4.163.195'
 UDP_PORT = 45454
-PICKLE = '/tmp/loc.pickle'
+PICKLE = os.path.join(HOMEDIR, 'loc.pickle')
+LOGFILE = os.path.join(HOMEDIR, 'beacon_client.log')
 #referer=http://www.weather.com/weather/today/Kansas+City+MO+64152?lswe=64152&lwsa=WeatherLocalUndeclared&from=searchbox_localwx
 #referer=http://www.weather.com/weather/map/interactive/34655
 
-def follow(thefile) :
-    log = open(thefile, 'r')
-    log.seek(0,2)
-    counter = 0
-    while True :
-        line = log.readline()
-        if not line :
-            print 'sleeping', counter
-            time.sleep(0.1)
-            counter += 1
-            if counter > 20 :
-                # if we get to 2 seconds without a line, see if we need to reset
+def build_logger() :
+    """ build my custom logger. Log to file by default. Criticals go to console.
+    Rotate logfiles after 1mb"""
+    global LOGFILE
+    global DEBUG
+    log = logging.getLogger()
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.ERROR)
+    hostname = os.uname()[1]
+    if '.' in hostname :
+        hostname = hostname[0:hostname.find('.')]
+    format_str = "%s %%(levelname)s\t: %%(message)s" % hostname
+    console_format = logging.Formatter(format_str)
+    console_handler.setFormatter(console_format)
+    file_handler = logging.handlers.RotatingFileHandler(LOGFILE, maxBytes=1000000,
+            backupCount=6)
+    if DEBUG :
+        log.setLevel(logging.DEBUG)
+        file_handler.setLevel(logging.DEBUG)
+    else :
+        log.setLevel(logging.INFO)
+        file_handler.setLevel(logging.INFO)
+    file_format = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    # had to remove $(funcName)s from format line because it's not in python 2.4.x
+    file_handler.setFormatter(file_format)
+    log.addHandler(console_handler)
+    log.addHandler(file_handler)
+    return log
+
+class LogTail:
+    """A generator class to yield whole lines from a given file.  Designed to be
+    robust in the face of file rotations on UNIXish platforms. (stole the logic for 
+    this from the 'WatchedFileHandler' in logging.handler)"""
+    def __init__(self, logfile, logger) :
+        self.logger = logger
+        self.logfile = os.path.abspath(logfile)
+        stat = os.stat(self.logfile)
+        self.dev, self.inode = stat[ST_DEV], stat[ST_INO]
+        self.f = open(self.logfile, 'r')
+        self.f.seek(0,2)
+        # go to the end of the file on startup.
+    def _reset(self) :
+        self.logger.info('found rotated file. resetting')
+        self.f.close()
+        self.f = open(self.logfile, 'r')
+        stat = os.stat(self.logfile)
+        self.dev, self.inode = stat[ST_DEV], stat[ST_INO]
+    def tail(self) :
+        counter = 0
+        while True :
+            line = self.f.readline()
+            if line :
+                yield line.strip()
                 counter = 0
-                cur_size = os.stat(thefile)[ST_SIZE]
-                cur_pos = log.tell()
-                #print 'size', cur_size, 'pos', cur_pos
-                if cur_size < cur_pos :
-                    # if the size of the file is less than the position in the
-                    # file...
-                    log.close()
-                    log = open(thefile, 'r')
-            continue
-        #print '=> yielding'
-        yield line.strip()
+            else :
+                counter += 1
+                if counter == 30 :
+                    self.logger.info('3 seconds without a beacon. yielding None')
+                    yield None
+                    counter = 0
+                stat = os.stat(self.logfile)
+                tdev, tinode = stat[ST_DEV], stat[ST_INO]
+                if tdev == self.dev and tinode == self.inode :
+                    time.sleep(0.1)
+                else :
+                    self._reset()
 
 def locfromline(line) :
+    if line == None :
+        return None
     parts = line.split('^')
     #d = {}
     #for p in parts :
@@ -65,6 +115,8 @@ def locfromline(line) :
     return location
 
 def latlongfromloc(locstr) :
+    if locstr == None :
+        return None,None
     #re_zip = re.compile('\d{5}')
     #re_loc = re.compile('US[A-Z]{2}\d{4}')
     re_loc = re.compile('\d{5}|US[A-Z]{2}/d{4}')
@@ -79,44 +131,47 @@ def latlongfromloc(locstr) :
         except KeyError :
             return None,None
 
-def main() :
+def main(logger) :
     global STOP_FILE
-    global DIR
+    global BEACONDIR
     global JOIN_STR
     if os.path.isfile(STOP_FILE) :
+        logger.debug('removing preexisting STOP_FILE %s' % STOP_FILE)
         os.unlink(STOP_FILE)
-    files = os.listdir(DIR)
+    files = os.listdir(BEACONDIR)
     result = None
     for file in files :
         if file.startswith('beacon') :
             result = file
             break
     if not result :
-        print 'mer?'
+        logger.critical('failed to find beacon log file. Exiting.')
         sys.exit()
-    log = os.path.join(DIR, file)
-    lines = follow(log)
-    lines2 = (line for line in lines if '/weather/' in line)
-    lines3 = (line for line in lines2 if '/weather/map/' not in line)
-    lines4 = (line for line in lines3 if '/b/impression' in line)
-    lines5 = (line for line in lines4 if 'tile=1&' not in line)
+    beacon_log = os.path.join(BEACONDIR, file)
+    #lines = follow(beacon_log)
+    #lines2 = (line for line in lines if '/weather/' in line)
+    lines = LogTail(beacon_log, logger)
+    lines2 = (line for line in lines.tail() if line == None or '/weather/' in line)
+    lines3 = (line for line in lines2 if line == None or '/weather/map/' not in line)
+    lines4 = (line for line in lines3 if line == None or '/b/impression' in line)
+    lines5 = (line for line in lines4 if line == None or 'tile=1&' in line)
     locs = (locfromline(line) for line in lines5)
     latlong = ( latlongfromloc(loc) for loc in locs if loc != None )
     counter = 0
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
     try :
         for lat,longi in latlong :
+            counter += 1
+            if counter % 50 == 0 :
+                if os.path.isfile(STOP_FILE) :
+                    break
             if lat == None :
                 continue
-            counter += 1
             #print lat,longi
             lat = "%3.1f" % float(lat)
             longi = "%3.1f" % float(longi)
             #print lat,longi
             sock.sendto( JOIN_STR.join((lat, longi)), 0, (DEST_IP, UDP_PORT))
-            if counter % 50 == 0 :
-                if os.path.isfile(STOP_FILE) :
-                    break
     except KeyboardInterrupt :
         print "sent messages: %d" % counter
         raise
@@ -124,7 +179,9 @@ def main() :
     s.write("sent messages: %d\n" % counter)
 
 if __name__ == '__main__' :
+    logger = build_logger()
+    logger.debug('opening pickled location info')
     p = open(PICKLE, 'rb')
     locdict = pickle.load(p)
     p.close()
-    main()
+    main(logger)
