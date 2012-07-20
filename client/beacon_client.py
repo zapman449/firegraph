@@ -65,36 +65,51 @@ class LogTail:
         self.f = open(self.logfile, 'r')
         self.f.seek(0,2)
         # go to the end of the file on startup.
-    def _reset(self) :
+    def _reset(self, fromthetop=True) :
         self.logger.info('found rotated file. resetting')
         self.f.close()
-        if os.path.exists(self.logfile) :
-            self.f = open(self.logfile, 'r')
-        else :
+        while not os.path.exists(self.logfile) :
             self.logger.info('sleeping 5 seconds waiting on beacon log creation')
             time.sleep(5)
-            self.f = open(self.logfile, 'r')
+        self.f = open(self.logfile, 'r')
+        if not fromthetop :
+            self.f.seek(0,2)
         stat = os.stat(self.logfile)
         self.dev, self.inode = stat[ST_DEV], stat[ST_INO]
     def tail(self) :
         counter = 0
+        errcounter = 0
         while True :
             line = self.f.readline()
             if line :
                 yield line.strip()
                 counter = 0
+                errcounter = 0
             else :
                 counter += 1
-                if counter == 30 :
+                time.sleep(0.1)
+                if counter >= 30 :
                     self.logger.info('3 seconds without a beacon. yielding None')
                     yield None
                     counter = 0
-                stat = os.stat(self.logfile)
-                tdev, tinode = stat[ST_DEV], stat[ST_INO]
-                if tdev == self.dev and tinode == self.inode :
-                    time.sleep(0.1)
-                else :
-                    self._reset()
+                    errcounter += 1
+                    if errcounter >= 10 :
+                        self.logger.info('forcing _reset due to 30 seconds without line')
+                        self._reset(fromthetop=False)
+                        errcounter = 0
+                        continue
+                    try :
+                        stat = os.stat(self.logfile)
+                    except IOError :
+                        self.logger.info('forcing _reset due to IOError for stat(beacon log)')
+                        self._reset()
+                        continue
+                    tdev, tinode = stat[ST_DEV], stat[ST_INO]
+                    if tdev == self.dev and tinode == self.inode :
+                        pass
+                    else :
+                        self.logger.info('forcing _reset due to dev/inode being different')
+                        self._reset()
 
 def locfromline(line) :
     if line == None :
@@ -164,6 +179,7 @@ def main(logger) :
     latlong = ( latlongfromloc(loc) for loc in locs if loc != None )
     counter = 0
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
+    logger.info('starting main() loop')
     try :
         for lat,longi in latlong :
             counter += 1
@@ -180,15 +196,28 @@ def main(logger) :
     except KeyboardInterrupt :
         print "sent messages: %d" % counter
         raise
+    except :
+        logger.exception('wtf?')
+        raise
     s = open(STOP_FILE, 'w')
     s.write("sent messages: %d\n" % counter)
 
 if __name__ == '__main__' :
     logger = build_logger()
     logger.debug('opening pickled location info')
-    p = open(PICKLE, 'rb')
-    locdict = pickle.load(p)
+    if os.path.exists(PICKLE) :
+        p = open(PICKLE, 'rb')
+    else :
+        logger.critical('failed to find pickled location info!')
+        sys.exit()
+    try :
+        locdict = pickle.load(p)
+    except :
+        logger.exception('failed to open pickle')
+        raise
     p.close()
+    logger.debug('successfully opened pickled location info')
+    logger.info('starting main()')
     try :
         main(logger)
     except :
