@@ -68,7 +68,12 @@ class LogTail:
     def _reset(self) :
         self.logger.info('found rotated file. resetting')
         self.f.close()
-        self.f = open(self.logfile, 'r')
+        if os.path.exists(self.logfile) :
+            self.f = open(self.logfile, 'r')
+        else :
+            self.logger.info('sleeping 5 seconds waiting on beacon log creation')
+            time.sleep(5)
+            self.f = open(self.logfile, 'r')
         stat = os.stat(self.logfile)
         self.dev, self.inode = stat[ST_DEV], stat[ST_INO]
     def tail(self) :
