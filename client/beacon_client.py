@@ -7,7 +7,7 @@ import os
 import os.path
 import re
 import socket
-from stat import ST_SIZE, ST_INO, ST_DEV
+from stat import ST_INO, ST_DEV
 import sys
 import time
 
@@ -105,7 +105,7 @@ def locfromline(line) :
     if len(url_parts) < 6 :
         #print repr(url_parts)
         return None
-    forecast = url_parts[4]
+    #forecast = url_parts[4]
     location = url_parts[5]
     if location in ('graph', 'None', '') :
         return None
@@ -184,4 +184,8 @@ if __name__ == '__main__' :
     p = open(PICKLE, 'rb')
     locdict = pickle.load(p)
     p.close()
-    main(logger)
+    try :
+        main(logger)
+    except :
+        logger.exception('error running main()')
+        raise
