@@ -26,14 +26,14 @@ JOIN_STR = '^'
 DEST_IP = '3.4.163.195'
 UDP_PORT = 45454
 PICKLE = os.path.join(DATADIR, 'loc.pickle')
-LOGFILE = os.path.join(LOGDIR, 'beacon_client.log')
+#LOGFILE = os.path.join(LOGDIR, 'beacon_client.log')
 #referer=http://www.weather.com/weather/today/Kansas+City+MO+64152?lswe=64152&lwsa=WeatherLocalUndeclared&from=searchbox_localwx
 #referer=http://www.weather.com/weather/map/interactive/34655
 
 def build_logger() :
     """ build my custom logger. Log to file by default. Criticals go to console.
     Rotate logfiles after 1mb"""
-    global LOGFILE
+    #global LOGFILE
     global DEBUG
     log = logging.getLogger()
     #console_handler = logging.StreamHandler()
