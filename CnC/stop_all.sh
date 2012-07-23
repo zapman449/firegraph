@@ -1,17 +1,7 @@
 #!/bin/bash
 
-touch 'stop'
-/opt/TWC/bin/serverlist -perline | grep "^beacon" | while read server ; do
-    scp 'stop' ${server}:/tmp
+for node in 1 2 3 ; do
+    for host in 0 1 2 3 4 5 6 ; do
+        ssh beacon${node}x0${host} "/tmp/beacon_client.py stop" &
+    done
 done
-rm -f 'stop'
-
-echo "--- sleeping ---"
-sleep 5
-
-/opt/TWC/bin/serverlist -perline | grep "^beacon" | while read server ; do
-    scp -q ${server}:/tmp/stop .
-    echo -n "$server  "
-    cat stop
-done
-rm -f stop
