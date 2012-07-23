@@ -11,6 +11,8 @@ from stat import ST_INO, ST_DEV
 import sys
 import time
 
+import daemon
+
 DEBUG = True
 
 BEACONDIR = '/logs/ns_logs/nginx'
@@ -134,7 +136,7 @@ def locfromline(line) :
     #print 'returning', repr(location)
     return location
 
-def latlongfromloc(locstr) :
+def latlongfromloc(locstr, locdict) :
     if locstr == None :
         return None,None
     #re_zip = re.compile('\d{5}')
@@ -155,6 +157,8 @@ def main(logger) :
     global STOP_FILE
     global BEACONDIR
     global JOIN_STR
+    locdict = open_pickle(logger)
+    logger.debug('successfully opened pickled location info')
     if os.path.isfile(STOP_FILE) :
         logger.debug('removing preexisting STOP_FILE %s' % STOP_FILE)
         os.unlink(STOP_FILE)
@@ -176,10 +180,10 @@ def main(logger) :
     lines4 = (line for line in lines3 if line == None or '/b/impression' in line)
     lines5 = (line for line in lines4 if line == None or 'tile=1&' in line)
     locs = (locfromline(line) for line in lines5)
-    latlong = ( latlongfromloc(loc) for loc in locs if loc != None )
+    latlong = ( latlongfromloc(loc, locdict) for loc in locs if loc != None )
     counter = 0
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
-    logger.info('starting main() loop')
+    logger.info('starting central loop')
     try :
         for lat,longi in latlong :
             counter += 1
@@ -202,9 +206,8 @@ def main(logger) :
     s = open(STOP_FILE, 'w')
     s.write("sent messages: %d\n" % counter)
 
-if __name__ == '__main__' :
-    logger = build_logger()
-    logger.debug('opening pickled location info')
+def open_pickle(logger) :
+    global PICKLE
     if os.path.exists(PICKLE) :
         p = open(PICKLE, 'rb')
     else :
@@ -216,10 +219,40 @@ if __name__ == '__main__' :
         logger.exception('failed to open pickle')
         raise
     p.close()
-    logger.debug('successfully opened pickled location info')
-    logger.info('starting main()')
-    try :
+    return locdict
+
+class daemon_client(daemon.Daemon) :
+    def run() :
+        logger = build_logger()
+        logger.info('starting main()')
+        logger.debug('opening pickled location info')
         main(logger)
-    except :
-        logger.exception('error running main()')
-        raise
+
+if __name__ == '__main__' :
+#    logger = build_logger()
+#    logger.info('starting main()')
+#    logger.debug('opening pickled location info')
+#    try :
+#        main(logger)
+#    except :
+#        logger.exception('error running main()')
+#        raise
+#    sys.exit()
+
+    pidfile = os.path.join(HOMEDIR, 'beacon_client.pid')
+    daemon = daemon_client(pidfile)
+    if len(sys.argv) == 2:
+        if 'start' == sys.argv[1]:
+            print 'starting'
+            daemon.start()
+        elif 'stop' == sys.argv[1]:
+            daemon.stop()
+        elif 'restart' == sys.argv[1]:
+            daemon.restart()
+        else:
+            print "Unknown command"
+            sys.exit(2)
+        sys.exit(0)
+    else:
+        print "usage: %s start|stop|restart" % sys.argv[0]
+        sys.exit(2)
