@@ -16,13 +16,17 @@ import daemon
 DEBUG = True
 
 BEACONDIR = '/logs/ns_logs/nginx'
-HOMEDIR = '/tmp'
-STOP_FILE = os.path.join(HOMEDIR, 'stop')
+DATADIR = '/tmp'        # location of pickle, scripts, etc.
+PIDDIR = '/tmp'
+LOGDIR = '/tmp'
+#DATADIR = '/web/firegraph/ # location of pickle, scripts, etc
+#PIDDIR = '/var/run'     # where the beacon_client.pid file lives
+#LOGDIR = '/var/log'     # where the beacon_client.log files live
 JOIN_STR = '^'
 DEST_IP = '3.4.163.195'
 UDP_PORT = 45454
-PICKLE = os.path.join(HOMEDIR, 'loc.pickle')
-LOGFILE = os.path.join(HOMEDIR, 'beacon_client.log')
+PICKLE = os.path.join(DATADIR, 'loc.pickle')
+LOGFILE = os.path.join(LOGDIR, 'beacon_client.log')
 #referer=http://www.weather.com/weather/today/Kansas+City+MO+64152?lswe=64152&lwsa=WeatherLocalUndeclared&from=searchbox_localwx
 #referer=http://www.weather.com/weather/map/interactive/34655
 
@@ -32,26 +36,28 @@ def build_logger() :
     global LOGFILE
     global DEBUG
     log = logging.getLogger()
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.ERROR)
+    #console_handler = logging.StreamHandler()
+    #console_handler.setLevel(logging.ERROR)
     hostname = os.uname()[1]
     if '.' in hostname :
         hostname = hostname[0:hostname.find('.')]
-    format_str = "%s %%(levelname)s\t: %%(message)s" % hostname
-    console_format = logging.Formatter(format_str)
-    console_handler.setFormatter(console_format)
-    file_handler = logging.handlers.RotatingFileHandler(LOGFILE, maxBytes=1000000,
-            backupCount=6)
+    #format_str = "%s %%(levelname)s\t: %%(message)s" % hostname
+    #console_format = logging.Formatter(format_str)
+    #console_handler.setFormatter(console_format)
+    #file_handler = logging.handlers.RotatingFileHandler(LOGFILE, maxBytes=1000000,
+    #        backupCount=6)
+    file_handler = logging.handlers.SysLogHandler(address = '/dev/log')
     if DEBUG :
         log.setLevel(logging.DEBUG)
         file_handler.setLevel(logging.DEBUG)
     else :
         log.setLevel(logging.INFO)
         file_handler.setLevel(logging.INFO)
-    file_format = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    #file_format = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    file_format = logging.Formatter("%(levelname)s %(message)s")
     # had to remove $(funcName)s from format line because it's not in python 2.4.x
     file_handler.setFormatter(file_format)
-    log.addHandler(console_handler)
+    #log.addHandler(console_handler)
     log.addHandler(file_handler)
     return log
 
@@ -91,12 +97,12 @@ class LogTail:
                 counter += 1
                 time.sleep(0.1)
                 if counter >= 30 :
-                    self.logger.info('3 seconds without a beacon. yielding None')
+                    self.logger.debug('3 seconds without a beacon. yielding None')
                     yield None
                     counter = 0
                     errcounter += 1
-                    if errcounter >= 10 :
-                        self.logger.info('forcing _reset due to 30 seconds without line')
+                    if errcounter >= 20 :
+                        self.logger.info('forcing _reset due to 1 min without line')
                         self._reset(fromthetop=False)
                         errcounter = 0
                         continue
@@ -154,14 +160,10 @@ def latlongfromloc(locstr, locdict) :
             return None,None
 
 def main(logger) :
-    global STOP_FILE
     global BEACONDIR
     global JOIN_STR
     locdict = open_pickle(logger)
     logger.debug('successfully opened pickled location info')
-    if os.path.isfile(STOP_FILE) :
-        logger.debug('removing preexisting STOP_FILE %s' % STOP_FILE)
-        os.unlink(STOP_FILE)
     files = os.listdir(BEACONDIR)
     result = None
     for file in files :
@@ -187,9 +189,6 @@ def main(logger) :
     try :
         for lat,longi in latlong :
             counter += 1
-            if counter % 50 == 0 :
-                if os.path.isfile(STOP_FILE) :
-                    break
             if lat == None :
                 continue
             #print lat,longi
@@ -203,8 +202,6 @@ def main(logger) :
     except :
         logger.exception('wtf?')
         raise
-    s = open(STOP_FILE, 'w')
-    s.write("sent messages: %d\n" % counter)
 
 def open_pickle(logger) :
     global PICKLE
@@ -222,32 +219,32 @@ def open_pickle(logger) :
     return locdict
 
 class daemon_client(daemon.Daemon) :
-    def run() :
-        logger = build_logger()
-        logger.info('starting main()')
-        logger.debug('opening pickled location info')
-        main(logger)
+    def __init__(self, pidfile, logger, stdin='/dev/null', 
+                 stdout='/dev/null', stderr='/dev/null'):
+        self.logger = logger
+        self.stdin = stdin
+        self.stdout = stdout
+        self.stderr = stderr
+        self.pidfile = pidfile
+
+    def run(self) :
+        main(self.logger)
 
 if __name__ == '__main__' :
-#    logger = build_logger()
-#    logger.info('starting main()')
-#    logger.debug('opening pickled location info')
-#    try :
-#        main(logger)
-#    except :
-#        logger.exception('error running main()')
-#        raise
-#    sys.exit()
-
-    pidfile = os.path.join(HOMEDIR, 'beacon_client.pid')
-    daemon = daemon_client(pidfile)
+    pidfile = os.path.join(PIDDIR, 'beacon_client.pid')
+    logger = build_logger()
+    logger.debug('logger object built')
+    daemon = daemon_client(pidfile, logger)
+    #logger.debug('daemon created')
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
-            print 'starting'
+            logger.debug('starting')
             daemon.start()
         elif 'stop' == sys.argv[1]:
+            logger.debug('stopping')
             daemon.stop()
         elif 'restart' == sys.argv[1]:
+            logger.debug('restarting')
             daemon.restart()
         else:
             print "Unknown command"
