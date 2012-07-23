@@ -145,8 +145,6 @@ def locfromline(line) :
 def latlongfromloc(locstr, locdict) :
     if locstr == None :
         return None,None
-    #re_zip = re.compile('\d{5}')
-    #re_loc = re.compile('US[A-Z]{2}\d{4}')
     re_loc = re.compile('\d{5}|US[A-Z]{2}/d{4}')
     # match either 5 digits (zip code) or US Weather Code (US<State><4digits>)
     lsearch = re_loc.search(locstr)
