@@ -33,19 +33,11 @@ PICKLE = os.path.join(DATADIR, 'loc.pickle')
 def build_logger() :
     """ build my custom logger. Log to file by default. Criticals go to console.
     Rotate logfiles after 1mb"""
-    #global LOGFILE
     global DEBUG
     log = logging.getLogger()
-    #console_handler = logging.StreamHandler()
-    #console_handler.setLevel(logging.ERROR)
     hostname = os.uname()[1]
     if '.' in hostname :
         hostname = hostname[0:hostname.find('.')]
-    #format_str = "%s %%(levelname)s\t: %%(message)s" % hostname
-    #console_format = logging.Formatter(format_str)
-    #console_handler.setFormatter(console_format)
-    #file_handler = logging.handlers.RotatingFileHandler(LOGFILE, maxBytes=1000000,
-    #        backupCount=6)
     file_handler = logging.handlers.SysLogHandler(address = '/dev/log')
     if DEBUG :
         log.setLevel(logging.DEBUG)
@@ -53,11 +45,8 @@ def build_logger() :
     else :
         log.setLevel(logging.INFO)
         file_handler.setLevel(logging.INFO)
-    #file_format = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     file_format = logging.Formatter("beacon_client %(levelname)s %(message)s")
-    # had to remove $(funcName)s from format line because it's not in python 2.4.x
     file_handler.setFormatter(file_format)
-    #log.addHandler(console_handler)
     log.addHandler(file_handler)
     return log
 
@@ -127,10 +116,6 @@ def locfromline(line, logger) :
     if line == None :
         return None
     parts = line.split('^')
-    #d = {}
-    #for p in parts :
-    #    idx = p.find('=')
-    #    d[p[0:idx]] = p[idx+1:]
     if len(parts) < 8 :
         logger.debug('insufficient parts' + repr(parts))
         return None
@@ -179,8 +164,6 @@ def main(logger) :
         logger.critical('failed to find beacon log file. Exiting.')
         sys.exit()
     beacon_log = os.path.join(BEACONDIR, file)
-    #lines = follow(beacon_log)
-    #lines2 = (line for line in lines if '/weather/' in line)
     lines = LogTail(beacon_log, logger)
     lines2 = (line for line in lines.tail() if line == None or '/weather/' in line)
     lines3 = (line for line in lines2 if line == None or '/weather/map/' not in line)
@@ -196,10 +179,8 @@ def main(logger) :
             counter += 1
             if lat == None :
                 continue
-            #print lat,longi
             lat = "%3.1f" % float(lat)
             longi = "%3.1f" % float(longi)
-            #print lat,longi
             sock.sendto( JOIN_STR.join((lat, longi)), 0, (DEST_IP, UDP_PORT))
     except KeyboardInterrupt :
         print "sent messages: %d" % counter
