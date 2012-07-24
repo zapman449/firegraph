@@ -4,11 +4,11 @@ import logging
 import logging.handlers
 import os
 import Queue
-import re
 import socket
 import sys
-import time
 import threading
+
+import daemon
 
 JOIN_STR = '^'
 UDP_IP = '3.4.163.195'
@@ -18,33 +18,26 @@ success_count = 0
 fail_count = 0
 DEBUG = False
 HOMEDIR = '/home/jprice/programs/firegraph/server'
-LOGFILE = os.path.join(HOMEDIR, 'beacon_server.log')
+#LOGFILE = os.path.join(HOMEDIR, 'beacon_server.log')
+PIDDIR = HOMEDIR
 
 def build_logger() :
-    """ build my custom logger. Log to file by default. Criticals go to console.
-    Rotate logfiles after 1mb"""
-    global LOGFILE
+    """ build my custom logger. Log to syslog by default."""
     global DEBUG
     log = logging.getLogger()
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.ERROR)
     hostname = os.uname()[1]
     if '.' in hostname :
         hostname = hostname[0:hostname.find('.')]
-    format_str = "%s %%(levelname)s\t: %%(message)s" % hostname
-    console_format = logging.Formatter(format_str)
-    console_handler.setFormatter(console_format)
-    file_handler = logging.handlers.RotatingFileHandler(LOGFILE, maxBytes=1000000,
-            backupCount=6)
+    file_handler = logging.handlers.SysLogHandler(address = '/dev/log')
     if DEBUG :
         log.setLevel(logging.DEBUG)
         file_handler.setLevel(logging.DEBUG)
     else :
         log.setLevel(logging.INFO)
         file_handler.setLevel(logging.INFO)
-    file_format = logging.Formatter("%(asctime)s %(levelname)s %(threadName)s %(message)s")
+    #file_format = logging.Formatter("beacon_server %(levelname)s %(funcName) %(message)s")
+    file_format = logging.Formatter("beacon_server %(levelname)s %(message)s")
     file_handler.setFormatter(file_format)
-    log.addHandler(console_handler)
     log.addHandler(file_handler)
     return log
 
@@ -70,7 +63,6 @@ class ThreadGenImage(threading.Thread) :
             counter += 1
             if counter >= 100 :
                 counter = 0
-            #print 'aggregate saved'
             self.logger.info('aggregate saved to %s' % name)
             self.aggregate_in_queue.task_done()
 
@@ -89,7 +81,6 @@ class ThreadSuccessTrack(threading.Thread) :
             if message == 'push' :
                 self.aggregate_in_queue.put(self.aggregate)
                 self.aggregate = {}
-                #print 'pushed aggregate'
                 self.logger.info('pushed aggregate')
             else :
                 lat, longi = message
@@ -98,11 +89,8 @@ class ThreadSuccessTrack(threading.Thread) :
                     self.aggregate[(lat,longi)] += 1
                 except KeyError :
                     self.aggregate[(lat,longi)] = 1
-                if self.successful % 100 == 0 :
-                    #print 'in SuccessTrack, # successes is %d, aggr size is %d, aggr queue size is %d' % (self.successful,
-                    #        len(self.aggregate),
-                    #        self.aggregate_in_queue.qsize())
-                    self.logger.info("# successes is %d, aggregate size is %d" % (self.successful, len(self.aggregate)))
+            #    if self.successful % 100 == 0 :
+            #        self.logger.info("# successes is %d, aggregate size is %d" % (self.successful, len(self.aggregate)))
             self.lat_long_in_queue.task_done()
 
 class ThreadLocationParse(threading.Thread) :
@@ -123,10 +111,9 @@ class ThreadLocationParse(threading.Thread) :
             self.lat_long_in_queue.put((lat,longi))
             self.data_in_queue.task_done()
             counter += 1
-            if counter % 200 == 0 :
-                #print "in LocParse data_in: %d lat_in: %d" % (self.data_in_queue.qsize(), self.lat_long_in_queue.qsize())
-                self.logger.info("data_in_q: %d lat_in_q: %d" % (self.data_in_queue.qsize(),
-                            self.lat_long_in_queue.qsize()))
+            #if counter % 200 == 0 :
+            #    self.logger.info("data_in_q: %d lat_in_q: %d" % (self.data_in_queue.qsize(),
+            #                self.lat_long_in_queue.qsize()))
 
 def server_loop(data_in_queue, lat_long_in_queue, logger) :
     global UDP_IP
@@ -138,14 +125,11 @@ def server_loop(data_in_queue, lat_long_in_queue, logger) :
         while True :
             data, addr = sock.recvfrom( 1024 )
             ip, port = addr
-            #print repr(data), repr(addr)
             try :
                 results[ip] += 1
             except KeyError :
                 results[ip] = 1
             counter += 1
-            #print repr(data)
-            #process_data(data, connection, cursor)
             data_in_queue.put(data)
             if counter >= 5000 :
                 counter = 0
@@ -156,15 +140,10 @@ def server_loop(data_in_queue, lat_long_in_queue, logger) :
         print 'received %d fail %d' % (success_count, fail_count)
         raise
 
-def main() :
-    logger = build_logger()
+def main(logger) :
     data_in_queue = Queue.Queue()
     lat_long_in_queue = Queue.Queue()
     aggregate_in_queue = Queue.Queue()
-    #processors = [ ThreadLocationParse(data_in_queue, lat_long_in_queue) for i in range(1) ]
-    #for p in processors :
-    #    p.setDaemon(True)
-    #    p.start()
     processor = ThreadLocationParse(data_in_queue, lat_long_in_queue, logger)
     processor.setDaemon(True)
     processor.start()
@@ -184,5 +163,38 @@ def main() :
             print k, results[k]
         raise
 
+class daemon_client(daemon.Daemon) :
+    def __init__(self, pidfile, logger, stdin='/dev/null', 
+                 stdout='/dev/null', stderr='/dev/null'):
+        self.logger = logger
+        self.stdin = stdin
+        self.stdout = stdout
+        self.stderr = stderr
+        self.pidfile = pidfile
+
+    def run(self) :
+        main(self.logger)
+
 if __name__ == '__main__' :
-    main()
+    pidfile = os.path.join(PIDDIR, 'beacon_server.pid')
+    logger = build_logger()
+    logger.debug('logger object built')
+    daemon = daemon_client(pidfile, logger)
+    #logger.debug('daemon created')
+    if len(sys.argv) == 2:
+        if 'start' == sys.argv[1]:
+            logger.info('starting')
+            daemon.start()
+        elif 'stop' == sys.argv[1]:
+            logger.info('stopping')
+            daemon.stop()
+        elif 'restart' == sys.argv[1]:
+            logger.info('restarting')
+            daemon.restart()
+        else:
+            print "Unknown command"
+            sys.exit(2)
+        sys.exit(0)
+    else:
+        print "usage: %s start|stop|restart" % sys.argv[0]
+        sys.exit(2)
