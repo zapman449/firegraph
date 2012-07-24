@@ -54,7 +54,7 @@ def build_logger() :
         log.setLevel(logging.INFO)
         file_handler.setLevel(logging.INFO)
     #file_format = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    file_format = logging.Formatter("%(levelname)s %(message)s")
+    file_format = logging.Formatter("beacon_client %(levelname)s %(message)s")
     # had to remove $(funcName)s from format line because it's not in python 2.4.x
     file_handler.setFormatter(file_format)
     #log.addHandler(console_handler)
