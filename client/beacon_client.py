@@ -123,7 +123,7 @@ class LogTail:
                         self.logger.info('forcing _reset due to dev/inode being different')
                         self._reset()
 
-def locfromline(line) :
+def locfromline(line, logger) :
     if line == None :
         return None
     parts = line.split('^')
@@ -131,6 +131,9 @@ def locfromline(line) :
     #for p in parts :
     #    idx = p.find('=')
     #    d[p[0:idx]] = p[idx+1:]
+    if len(parts) < 8 :
+        logger.debug('insufficient parts' + repr(parts))
+        return None
     r = parts[7]
     r = r[r.find('=')+1:]
     url_parts = r.split('/')
@@ -183,7 +186,7 @@ def main(logger) :
     lines3 = (line for line in lines2 if line == None or '/weather/map/' not in line)
     lines4 = (line for line in lines3 if line == None or '/b/impression' in line)
     lines5 = (line for line in lines4 if line == None or 'tile=1&' in line)
-    locs = (locfromline(line) for line in lines5)
+    locs = (locfromline(line, logger) for line in lines5)
     latlong = ( latlongfromloc(loc, locdict) for loc in locs if loc != None )
     counter = 0
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
