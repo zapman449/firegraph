@@ -1,6 +1,10 @@
 1) make both beacon_client and server into daemons.  Create proper init.d 
-   scripts.
+   scripts.    DONE
 2) make server.py use twisted (possibly).
 3) change home directory for beacon_client to somewhere other than /tmp
+		DONE (variablized)
+
+4) Do config file via ConfigParser
+5) Figure out why beaconclient crashes
 
 --Jason
