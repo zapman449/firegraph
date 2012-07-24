@@ -112,6 +112,10 @@ class LogTail:
                         self.logger.info('forcing _reset due to IOError for stat(beacon log)')
                         self._reset()
                         continue
+                    except OSError :
+                        self.logger.info('forcing _reset due to FileNotFound')
+                        self._reset()
+                        continue
                     tdev, tinode = stat[ST_DEV], stat[ST_INO]
                     if tdev == self.dev and tinode == self.inode :
                         pass
