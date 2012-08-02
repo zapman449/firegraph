@@ -134,6 +134,39 @@ def locfromline(line, logger) :
     #print 'returning', repr(location)
     return location
 
+# dies currently when referer (!) has = in it. gah
+
+#def locfromline(line, logger) :
+#    if line == None :
+#        return None
+#    # This is a bit crazy magic.  Logically, it first replaces the & chars with
+#    # ^ chars.  Then it splits on ^, tosses empty splits, and the qs= split
+#    # (since it logically has three items).  Then it takes the x=y pairs, and
+#    # throws them into a dictionary, keyed on x.
+#    try :
+#        parts = dict(item.split('=') for item in 
+#                          line.replace('&', '^').split('^') 
+#                          if item != "" and not item.startswith('qs='))
+#    except :
+#        parts = (item.split('=') for item in 
+#                          line.replace('&', '^').split('^') 
+#                          if item != "" and not item.startswith('qs='))
+#        for p in parts :
+#            if len(p) != 2 :
+#                logger.critical(repr(p))
+#        raise
+#    #site = parts['site']
+#    refer = parts['referer']
+#    url_parts = refer.split('/')
+#    if len(url_parts) < 6 :
+#        return None
+#    location = url_parts[5]
+#    if location in ('graph', 'None', '') :
+#        return None
+#    if '?' in location :
+#        location = location[0:location.find('?')]
+#    return location
+
 def latlongfromloc(locstr, locdict) :
     if locstr == None :
         return None,None
