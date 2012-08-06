@@ -1,12 +1,21 @@
 1) Make client's 'debug' argument 1) not daemonize, and 2) force a change in
    logging from syslog to console.
 2) make server.py use twisted (possibly).
+3) Make proper init.d scripts
 4) Do config file via ConfigParser
+
+JSON data:
+[ {}, {}, ... {}]
+    { ts_start=epoch
+      ts_end=epoch
+      points = [ {}, {}, {} ... {} ]
+           { lat = ##.#
+             lon = ##.#
+             type = string } }
 
 --Jason
 
-1) make both beacon_client and server into daemons.  Create proper init.d 
-   scripts.    DONE
+1) make both beacon_client and server into daemons.  DONE
 3) change home directory for beacon_client to somewhere other than /tmp
 		DONE (variablized)
 5) Figure out why beaconclient crashes    DONE
