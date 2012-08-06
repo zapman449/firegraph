@@ -162,6 +162,8 @@ def scanline(line, logger) :
         Split each section into key,value pairs, and make a dictionary.
         Site is in qs section, requester_ip is in pre_qs, referer is in post_qs
     """
+    if line == None :
+        return None
     line = line.strip()
     qs_start = line.find('^qs=')
     if qs_start == -1 :
@@ -174,7 +176,7 @@ def scanline(line, logger) :
     pre_qs = line[:qs_start]
     qs = line[qs_start:qs_end]
     post_qs = line[qs_end:]
-    logger.info('___'.join((pre_qs,qs,post_qs)))
+    logger.debug('___'.join((pre_qs,qs,post_qs)))
     try :
         pre_qs_d = dict(item.split('=', 1) for item in pre_qs.split('^')
                                     if item != "")
@@ -193,7 +195,7 @@ def scanline(line, logger) :
                 if len(l) != 2 :
                     logger.warning('warn: ' + repr(l))
         raise
-    logger.info('done splitting line')
+    logger.debug('done splitting line')
     remote_ip = pre_qs_d['remote']
     site = qs_d['site']
     if site and remote_ip :
