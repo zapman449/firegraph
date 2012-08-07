@@ -29,6 +29,7 @@ PICKLE = os.path.join(DATADIR, 'loc.pickle')
 #LOGFILE = os.path.join(LOGDIR, 'beacon_client.log')
 #referer=http://www.weather.com/weather/today/Kansas+City+MO+64152?lswe=64152&lwsa=WeatherLocalUndeclared&from=searchbox_localwx
 #referer=http://www.weather.com/weather/map/interactive/34655
+PROTOCOL_VERSION = '2'
 
 def build_logger() :
     """ build my custom logger. Log to file by default. Criticals go to console.
@@ -202,26 +203,28 @@ def scanline(line, logger) :
         pass
     referer = post_qs_d['referer']
     location = location_from_referer(referer, logger)
-    return location
+    return location, site, remote_ip
 
-def latlongfromloc(locstr, locdict) :
-    if locstr == None :
-        return None,None
+def latlongfromloc(loctup, locdict) :
+    if loctup == None :
+        return None,None,None
+    locstr = loctup[0]
     re_loc = re.compile('\d{5}|US[A-Z]{2}/d{4}')
     # match either 5 digits (zip code) or US Weather Code (US<State><4digits>)
     lsearch = re_loc.search(locstr)
     if lsearch == None :
-        return None,None
+        return None,None,None
     else :
         zip_or_wcode = lsearch.group()
         try :
-            return locdict[zip_or_wcode]
+            return locdict[zip_or_wcode], loctup[1], loctup[2]
         except KeyError :
-            return None,None
+            return None,None,None
 
 def main(logger, DEBUG=False) :
     global BEACONDIR
     global JOIN_STR
+    global PROTOCOL_VERSION
     locdict = open_pickle(logger)
     logger.debug('successfully opened pickled location info')
     files = os.listdir(BEACONDIR)
@@ -243,20 +246,21 @@ def main(logger, DEBUG=False) :
     lines4 = (line for line in lines3 if line == None or '/b/impression' in line)
     lines5 = (line for line in lines4 if line == None or 'tile=1&' in line)
     #locs = (locfromline(line, logger) for line in lines5)
-    locs = (scanline(line, logger) for line in lines5)
-    latlong = ( latlongfromloc(loc, locdict) for loc in locs if loc != None )
+    loc_tups = (scanline(line, logger) for line in lines5)
+    lat_long_site = (latlongfromloc(loc_tup, locdict) for loc_tup in loc_tups if loc_tup != None )
     counter = 0
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
     logger.info('starting central loop')
     try :
-        for lat,longi in latlong :
+        for lat,longi,site in lat_long_site :
             counter += 1
             if lat == None :
                 continue
             lat = "%3.1f" % float(lat)
             longi = "%3.1f" % float(longi)
+            message = JOIN_STR.join((PROTOCOL_VERSION, lat, longi, site))
             if not DEBUG :
-                sock.sendto( JOIN_STR.join((lat, longi)), 0, (DEST_IP, UDP_PORT))
+                sock.sendto( message, 0, (DEST_IP, UDP_PORT))
     except KeyboardInterrupt :
         print "sent messages: %d" % counter
         raise
