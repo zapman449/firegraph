@@ -1,5 +1,6 @@
 #!/usr/bin/pypy
 
+import json
 import logging
 import logging.handlers
 import os
@@ -20,6 +21,8 @@ DEBUG = False
 HOMEDIR = '/home/jprice/programs/firegraph/server'
 #LOGFILE = os.path.join(HOMEDIR, 'beacon_server.log')
 PIDDIR = HOMEDIR
+
+PROTOCOL_VERSION = '2'
 
 def build_logger() :
     """ build my custom logger. Log to syslog by default."""
@@ -105,9 +108,11 @@ class ThreadLocationParse(threading.Thread) :
         counter = 0
         while True :
             data = self.data_in_queue.get()
-            lat, longi = data.split(JOIN_STR)
-            lat = float(lat)
-            longi = float(longi)
+            #lat, longi = data.split(JOIN_STR)
+            # INSUFFICIENT
+            message = json.loads(data)
+            lat = message['latitude']
+            longi = message['longitude']
             self.lat_long_in_queue.put((lat,longi))
             self.data_in_queue.task_done()
             counter += 1
