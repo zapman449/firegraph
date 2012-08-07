@@ -12,6 +12,10 @@ import sys
 import time
 
 import daemon
+try :
+    import json
+except ImportError :
+    import simplejson as json
 
 DEBUG = True
 
@@ -118,28 +122,6 @@ class LogTail:
                         self.logger.info('forcing _reset due to dev/inode being different')
                         self._reset()
 
-#def locfromline(line, logger) :
-#    if line == None :
-#        return None
-#    parts = line.split('^')
-#    if len(parts) < 8 :
-#        logger.debug('insufficient parts' + repr(parts))
-#        return None
-#    r = parts[7]
-#    r = r[r.find('=')+1:]
-#    url_parts = r.split('/')
-#    if len(url_parts) < 6 :
-#        #print repr(url_parts)
-#        return None
-#    #forecast = url_parts[4]
-#    location = url_parts[5]
-#    if location in ('graph', 'None', '') :
-#        return None
-#    if '?' in location :
-#        location = location[0:location.find('?')]
-#    #print 'returning', repr(location)
-#    return location
-
 def location_from_referer(referer, logger) :
     logger.debug('in location_from_referer')
     url_parts = referer.split('/')
@@ -245,7 +227,6 @@ def main(logger, DEBUG=False) :
     lines3 = (line for line in lines2 if line == None or '/weather/map/' not in line)
     lines4 = (line for line in lines3 if line == None or '/b/impression' in line)
     lines5 = (line for line in lines4 if line == None or 'tile=1&' in line)
-    #locs = (locfromline(line, logger) for line in lines5)
     loc_tups = (scanline(line, logger) for line in lines5)
     lat_long_site = (latlongfromloc(loc_tup, locdict) for loc_tup in loc_tups if loc_tup != None )
     counter = 0
@@ -258,7 +239,11 @@ def main(logger, DEBUG=False) :
                 continue
             lat = "%3.1f" % float(lat)
             longi = "%3.1f" % float(longi)
-            message = JOIN_STR.join((PROTOCOL_VERSION, lat, longi, site))
+            #message = JOIN_STR.join((PROTOCOL_VERSION, lat, longi, site))
+            message = json.dumps({ 'PROTOCOL_VERSION' : PROTOCOL_VERSION,
+                                   'latitude' : lat,
+                                   'longitude' : longi,
+                                   'site' : site})
             if not DEBUG :
                 sock.sendto( message, 0, (DEST_IP, UDP_PORT))
     except KeyboardInterrupt :
