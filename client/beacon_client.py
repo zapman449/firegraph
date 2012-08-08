@@ -56,9 +56,11 @@ def build_logger() :
     return log
 
 class LogTail:
-    """A generator class to yield whole lines from a given file.  Designed to be
-    robust in the face of file rotations on UNIXish platforms. (stole the logic for 
-    this from the 'WatchedFileHandler' in logging.handler)"""
+    """A generator class to yield whole lines from a given file.  Designed
+    to be robust in the face of file rotations on UNIXish platforms. 
+    (stole the logic for this from the 'WatchedFileHandler' in 
+    logging.handler)"""
+
     def __init__(self, logfile, logger, onefileonly=False) :
         self.logger = logger
         self.onefileonly = onefileonly
@@ -73,7 +75,8 @@ class LogTail:
         self.logger.info('found rotated file. resetting')
         self.f.close()
         while not os.path.exists(self.logfile) :
-            self.logger.info('sleeping 5 seconds waiting on beacon log creation')
+            self.logger.info('sleeping 5 seconds waiting on'
+                             'beacon log creation')
             time.sleep(5)
         self.f = open(self.logfile, 'r')
         if not fromthetop :
@@ -96,19 +99,22 @@ class LogTail:
                 counter += 1
                 time.sleep(0.1)
                 if counter >= 30 :
-                    self.logger.debug('3 seconds without a beacon. yielding None')
+                    self.logger.debug('3 seconds without a beacon.'
+                                      'yielding None')
                     yield None
                     counter = 0
                     errcounter += 1
                     if errcounter >= 20 :
-                        self.logger.info('forcing _reset due to 1 min without line')
+                        self.logger.info('forcing _reset due to'
+                                         '1 min without line')
                         self._reset(fromthetop=False)
                         errcounter = 0
                         continue
                     try :
                         stat = os.stat(self.logfile)
                     except IOError :
-                        self.logger.info('forcing _reset due to IOError for stat(beacon log)')
+                        self.logger.info('forcing _reset due to IOError'
+                                         'for stat(beacon log)')
                         self._reset()
                         continue
                     except OSError :
@@ -119,7 +125,8 @@ class LogTail:
                     if tdev == self.dev and tinode == self.inode :
                         pass
                     else :
-                        self.logger.info('forcing _reset due to dev/inode being different')
+                        self.logger.info('forcing _reset due to'
+                                         'dev/inode being different')
                         self._reset()
 
 def location_from_referer(referer, logger) :
@@ -143,7 +150,8 @@ def scanline(line, logger) :
            qs= which is & delimited
            post_qs which starts with 'method=', and is ^ delimited
         Split each section into key,value pairs, and make a dictionary.
-        Site is in qs section, requester_ip is in pre_qs, referer is in post_qs
+        Site is in qs section, requester_ip is in pre_qs, referer is in
+        post_qs
     """
     if line == None :
         return None
@@ -227,12 +235,18 @@ def main(logger, DEBUG=False) :
         lines = LogTail(beacon_log, logger, onefileonly=True)
     else :
         lines = LogTail(beacon_log, logger)
-    lines2 = (line for line in lines.tail() if line == None or '/weather/' in line)
-    lines3 = (line for line in lines2 if line == None or '/weather/map/' not in line)
-    lines4 = (line for line in lines3 if line == None or '/b/impression' in line)
-    lines5 = (line for line in lines4 if line == None or 'tile=1&' in line)
+    lines2 = (line for line in lines.tail()
+                   if line == None or '/weather/' in line)
+    lines3 = (line for line in lines2
+                   if line == None or '/weather/map/' not in line)
+    lines4 = (line for line in lines3
+                   if line == None or '/b/impression' in line)
+    lines5 = (line for line in lines4
+                   if line == None or 'tile=1&' in line)
     loc_tups = (scanline(line, logger) for line in lines5)
-    lat_long_site = (latlongfromloc(loc_tup, locdict) for loc_tup in loc_tups if loc_tup != None )
+    lat_long_site = (latlongfromloc(loc_tup, locdict) 
+                        for loc_tup in loc_tups
+                        if loc_tup != None )
     counter = 0
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
     logger.info('starting central loop')
