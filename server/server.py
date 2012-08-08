@@ -38,7 +38,6 @@ def build_logger() :
     else :
         log.setLevel(logging.INFO)
         file_handler.setLevel(logging.INFO)
-    #file_format = logging.Formatter("beacon_server %(levelname)s %(funcName) %(message)s")
     file_format = logging.Formatter("beacon_server %(levelname)s %(message)s")
     file_handler.setFormatter(file_format)
     log.addHandler(file_handler)
@@ -92,8 +91,6 @@ class ThreadSuccessTrack(threading.Thread) :
                     self.aggregate[(lat,longi)] += 1
                 except KeyError :
                     self.aggregate[(lat,longi)] = 1
-            #    if self.successful % 100 == 0 :
-            #        self.logger.info("# successes is %d, aggregate size is %d" % (self.successful, len(self.aggregate)))
             self.lat_long_in_queue.task_done()
 
 class ThreadLocationParse(threading.Thread) :
@@ -111,14 +108,17 @@ class ThreadLocationParse(threading.Thread) :
             #lat, longi = data.split(JOIN_STR)
             # INSUFFICIENT
             message = json.loads(data)
-            lat = message['latitude']
-            longi = message['longitude']
-            self.lat_long_in_queue.put((lat,longi))
-            self.data_in_queue.task_done()
-            counter += 1
-            #if counter % 200 == 0 :
-            #    self.logger.info("data_in_q: %d lat_in_q: %d" % (self.data_in_queue.qsize(),
-            #                self.lat_long_in_queue.qsize()))
+            try :
+                lat = message['latitude']
+                longi = message['longitude']
+            except KeyError:
+                logger.warning("message parsing failure. Message is:")
+                logger.warning(data)
+            else :
+                self.lat_long_in_queue.put((lat,longi))
+                counter += 1
+            finally :
+                self.data_in_queue.task_done()
 
 def server_loop(data_in_queue, lat_long_in_queue, logger) :
     global UDP_IP
