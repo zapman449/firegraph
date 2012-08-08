@@ -196,11 +196,15 @@ def scanline(line, logger) :
                     logger.warning('warn: ' + repr(l))
         raise
     logger.debug('done splitting line')
-    remote_ip = pre_qs_d['remote']
-    site = qs_d['site']
-    if site and remote_ip :
-        pass
-    referer = post_qs_d['referer']
+    try :
+        remote_ip = pre_qs_d['remote']
+        site = qs_d['site']
+        if site and remote_ip :
+            pass
+        referer = post_qs_d['referer']
+    except KeyError, err :
+        logger.debug('key not found: %s' % str(err))
+        return None
     location = location_from_referer(referer, logger)
     return location
 
@@ -262,6 +266,9 @@ def main(logger, DEBUG=False) :
         raise
     except :
         logger.exception('wtf?')
+        logger.critical(str(sys.exc_info()[0]))
+        logger.critical(str(sys.exc_info()[1]))
+        logger.critical(str(sys.exc_info()[2]))
         raise
 
 def open_pickle(logger) :
