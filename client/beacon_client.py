@@ -263,6 +263,7 @@ def main(logger, DEBUG=False) :
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
     logger.info('starting central loop')
     try :
+# TODO: dump data directly into json.dumps!
         for data in dictgener :
             #logger.debug('debug out %s' % repr(data))
             if data == None :
