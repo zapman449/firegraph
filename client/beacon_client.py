@@ -130,7 +130,7 @@ class LogTail:
                         self._reset()
 
 def location_from_referer(referer, logger) :
-    logger.debug('in location_from_referer')
+    #logger.debug('in location_from_referer')
     url_parts = referer.split('/')
     if len(url_parts) < 6 :
         #print repr(url_parts)
@@ -141,8 +141,25 @@ def location_from_referer(referer, logger) :
         return None
     if '?' in location :
         location = location[0:location.find('?')]
-    #print 'returning', repr(location)
     return location
+
+def latlongfromloc(locstr) :
+    global locdict
+    if locstr == None :
+        return None
+    re_loc = re.compile('\d{5}|US[A-Z]{2}/d{4}')
+    # match either 5 digits (zip code) or US Weather Code (US<State><4digits>)
+    #logger.info("latlongfromloc locstr is %s" % repr(locstr))
+    lsearch = re_loc.search(locstr)
+    if lsearch == None :
+        return None
+    else :
+        zip_or_wcode = lsearch.group()
+        try :
+            lat, longi = locdict[zip_or_wcode]
+        except KeyError :
+            return None
+        return lat, longi
 
 def scanline(line, logger) :
     """ The beacon lines have 3 sections :
@@ -167,7 +184,7 @@ def scanline(line, logger) :
     pre_qs = line[:qs_start]
     qs = line[qs_start:qs_end]
     post_qs = line[qs_end:]
-    logger.debug('___'.join((pre_qs,qs,post_qs)))
+    #logger.debug('___'.join((pre_qs,qs,post_qs)))
     try :
         pre_qs_d = dict(item.split('=', 1) for item in pre_qs.split('^')
                                     if item != "")
@@ -186,41 +203,40 @@ def scanline(line, logger) :
                 if len(l) != 2 :
                     logger.warning('warn: ' + repr(l))
         raise
-    logger.debug('done splitting line')
+    #logger.debug('done splitting line')
     try :
         remote_ip = pre_qs_d['remote']
         site = qs_d['site']
-        if site and remote_ip :
-            pass
         referer = post_qs_d['referer']
     except KeyError, err :
         logger.debug('key not found: %s' % str(err))
         return None
+    result = {}
+    result['site'] = site
+    result['remote_ip'] = remote_ip
     location = location_from_referer(referer, logger)
-    return location, site, remote_ip
-
-def latlongfromloc(loctup, locdict) :
-    if loctup == None :
-        return None,None,None
-    locstr = loctup[0]
-    re_loc = re.compile('\d{5}|US[A-Z]{2}/d{4}')
-    # match either 5 digits (zip code) or US Weather Code (US<State><4digits>)
-    lsearch = re_loc.search(locstr)
-    if lsearch == None :
-        return None,None,None
-    else :
-        zip_or_wcode = lsearch.group()
-        try :
-            return locdict[zip_or_wcode], loctup[1], loctup[2]
-        except KeyError :
-            return None,None,None
+    latlong = latlongfromloc(location)
+    if latlong == None : 
+        return None
+    # lat and long are string '-32.123456'  Cast as a float, format to 1
+    # decimal place strings.  Should I just cut 1 after period?  Yes. 
+    # t = timeit.Timer('"%3.1f" % float("-12.345678")')
+    # print t.timeit()
+    #     1.9171
+    # u = timeit.Timer(stmt='foo[:foo.find(".")+2]', setup='foo="-12.345678"')
+    # print u.timeit()
+    #     0.8786
+    #  NOTE: test on native python v2.4.3
+    result['latitude'] = latlong[0][0:latlong[0].find('.') + 2]
+    result['longitude'] = latlong[1][0:latlong[1].find('.') + 2]
+    #result['latitude'] = "%3.1f" % float(latlong[0])
+    #result['longitude'] = "%3.1f" % float(latlong[1])
+    return result
 
 def main(logger, DEBUG=False) :
     global BEACONDIR
     global JOIN_STR
     global PROTOCOL_VERSION
-    locdict = open_pickle(logger)
-    logger.debug('successfully opened pickled location info')
     files = os.listdir(BEACONDIR)
     result = None
     for file in files :
@@ -243,20 +259,20 @@ def main(logger, DEBUG=False) :
                    if line == None or '/b/impression' in line)
     lines5 = (line for line in lines4
                    if line == None or 'tile=1&' in line)
-    loc_tups = (scanline(line, logger) for line in lines5)
-    lat_long_site = (latlongfromloc(loc_tup, locdict) 
-                        for loc_tup in loc_tups
-                        if loc_tup != None )
-    counter = 0
+    dictgener = (scanline(line, logger) for line in lines5)
     sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
     logger.info('starting central loop')
     try :
-        for lat,longi,site in lat_long_site :
-            counter += 1
-            if lat == None :
+        for data in dictgener :
+            #logger.debug('debug out %s' % repr(data))
+            if data == None :
                 continue
-            lat = "%3.1f" % float(lat)
-            longi = "%3.1f" % float(longi)
+            #logger.info('lat is %s long is %s site is %s' % (lat, longi, site))
+            lat = "%3.1f" % float(data['latitude'])
+            longi = "%3.1f" % float(data['longitude'])
+            site = data['site']
+            #remote_ip = data['remote_ip']
+            #logger.info('lat is %s long is %s site is %s' % (lat, longi, site))
             #message = JOIN_STR.join((PROTOCOL_VERSION, lat, longi, site))
             message = json.dumps({ 'PROTOCOL_VERSION' : PROTOCOL_VERSION,
                                    'latitude' : lat,
@@ -264,9 +280,6 @@ def main(logger, DEBUG=False) :
                                    'site' : site})
             if not DEBUG :
                 sock.sendto( message, 0, (DEST_IP, UDP_PORT))
-    except KeyboardInterrupt :
-        print "sent messages: %d" % counter
-        raise
     except :
         logger.exception('wtf?')
         logger.critical(str(sys.exc_info()[0]))
@@ -313,6 +326,8 @@ if __name__ == '__main__' :
     #logger.debug('daemon created')
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1] or 'debug' == sys.argv[1]:
+            logger.debug('opening pickle')
+            locdict = open_pickle(logger)
             logger.debug('starting')
             daemon.start()
         elif 'stop' == sys.argv[1]:
