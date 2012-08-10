@@ -208,8 +208,8 @@ def scanline(line, logger) :
         remote_ip = pre_qs_d['remote']
         site = qs_d['site']
         referer = post_qs_d['referer']
-    except KeyError, err :
-        logger.debug('key not found: %s' % str(err))
+    except KeyError :
+        logger.debug('key not found')
         return None
     result = {}
     result['site'] = site
