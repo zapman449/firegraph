@@ -154,6 +154,15 @@ def location_from_referer(referer, logger) :
     #print 'returning', repr(location)
     return location
 
+def smart_split(subline, delimiter) :
+    for item in subline.split(delimiter) :
+        if item == "" :
+            continue
+        l = item.split('=', 1)
+        if len(l) != 2 :
+            continue
+        yield l
+
 def scanline(line, logger) :
     """ The beacon lines have 3 sections :
            pre_qs= which is ^ delimited
@@ -177,24 +186,29 @@ def scanline(line, logger) :
     qs = line[qs_start:qs_end]
     post_qs = line[qs_end:]
     logger.debug('___'.join((pre_qs,qs,post_qs)))
-    try :
-        pre_qs_d = dict(item.split('=', 1) for item in pre_qs.split('^')
-                                    if item != "")
-        qs_d = dict(item.split('=', 1) for item in qs.split('&')
-                                    if item != "" and "=" in item)
-        post_qs_d = dict(item.split('=', 1) for item in post_qs.split('^')
-                                    if item != "")
-    except :
-        logger.exception()
-        logger.warning(line)
-        for s, delim in ((pre_qs, '^'), (qs, '&'), (post_qs, '^')) :
-            for item in s.split(delim) :
-                if item == "" :
-                    continue
-                l = item.split('=', 1)
-                if len(l) != 2 :
-                    logger.warning('warn: ' + repr(l))
-        raise
+    pre_qs_d = dict(smart_split(pre_qs, '^'))
+    qs_d = dict(smart_split(qs, '&'))
+    post_qs_d = dict(smart_split(post_qs, '^'))
+#    try :
+#        pre_qs_d = dict(item.split('=', 1) for item in pre_qs.split('^')
+#                                    if item != "")
+#        qs_d = dict(item.split('=', 1) for item in qs.split('&')
+#                                    if item != "" and "=" in item)
+#        post_qs_d = dict(item.split('=', 1) for item in post_qs.split('^')
+#                                    if item != "")
+#    except :
+#        logger.exception()
+#        logger.warning(line)
+#        for n, s, delim in (('pre_qs', pre_qs, '^'),
+#                            ('qs', qs, '&'),
+#                            ('post_qs', post_qs, '^')) :
+#            for item in s.split(delim) :
+#                if item == "" :
+#                    continue
+#                l = item.split('=', 1)
+#                if len(l) != 2 :
+#                    logger.warning('warn: in' + n + repr(l))
+#        raise
     logger.debug('done splitting line')
     remote_ip = pre_qs_d['remote']
     site = qs_d['site']
