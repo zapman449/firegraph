@@ -117,28 +117,6 @@ class LogTail:
                         self.logger.info('forcing _reset due to dev/inode being different')
                         self._reset()
 
-#def locfromline(line, logger) :
-#    if line == None :
-#        return None
-#    parts = line.split('^')
-#    if len(parts) < 8 :
-#        logger.debug('insufficient parts' + repr(parts))
-#        return None
-#    r = parts[7]
-#    r = r[r.find('=')+1:]
-#    url_parts = r.split('/')
-#    if len(url_parts) < 6 :
-#        #print repr(url_parts)
-#        return None
-#    #forecast = url_parts[4]
-#    location = url_parts[5]
-#    if location in ('graph', 'None', '') :
-#        return None
-#    if '?' in location :
-#        location = location[0:location.find('?')]
-#    #print 'returning', repr(location)
-#    return location
-
 def location_from_referer(referer, logger) :
     logger.debug('in location_from_referer')
     url_parts = referer.split('/')
@@ -189,32 +167,15 @@ def scanline(line, logger) :
     pre_qs_d = dict(smart_split(pre_qs, '^'))
     qs_d = dict(smart_split(qs, '&'))
     post_qs_d = dict(smart_split(post_qs, '^'))
-#    try :
-#        pre_qs_d = dict(item.split('=', 1) for item in pre_qs.split('^')
-#                                    if item != "")
-#        qs_d = dict(item.split('=', 1) for item in qs.split('&')
-#                                    if item != "" and "=" in item)
-#        post_qs_d = dict(item.split('=', 1) for item in post_qs.split('^')
-#                                    if item != "")
-#    except :
-#        logger.exception()
-#        logger.warning(line)
-#        for n, s, delim in (('pre_qs', pre_qs, '^'),
-#                            ('qs', qs, '&'),
-#                            ('post_qs', post_qs, '^')) :
-#            for item in s.split(delim) :
-#                if item == "" :
-#                    continue
-#                l = item.split('=', 1)
-#                if len(l) != 2 :
-#                    logger.warning('warn: in' + n + repr(l))
-#        raise
     logger.debug('done splitting line')
-    remote_ip = pre_qs_d['remote']
-    site = qs_d['site']
-    if site and remote_ip :
-        pass
-    referer = post_qs_d['referer']
+    try :
+        remote_ip = pre_qs_d['remote']
+        site = qs_d['site']
+        referer = post_qs_d['referer']
+    except KeyError:
+        return None
+    f = remote_ip + site    # these two lines make pyflakes stop barking
+    del(f)                  # kill them later.
     location = location_from_referer(referer, logger)
     return location
 
